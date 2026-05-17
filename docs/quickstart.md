@@ -31,7 +31,7 @@ Copy the output dataset to your workstation as a binary file.
 
 ### SETROPTS REXX export
 
-MFAudit requires a **REXX-produced** SETROPTS export — not raw `SETROPTS LIST` console output. Read https://mfpandas.readthedocs.io/en/latest/setropts.html for information on how to generate the SETROPTS file.
+MFAudit requires a **REXX-produced** SETROPTS export — not raw `SETROPTS LIST` console output. See the [mfpandas SETROPTS documentation](https://mfpandas.readthedocs.io/en/latest/setropts.html) for how to generate it.
 
 The exec writes one `KEY:VALUE` line per setting. Copy `SETROPTS` to your workstation as text.
 
