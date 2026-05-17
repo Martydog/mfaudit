@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mfaudit"
+version = "0.1.0"
+description = "Automated RACF security auditing — CIS Benchmarks"
+readme = "README.md"
+license = { text = "AGPL-3.0-or-later" }
+authors = [
+    { name = "Wizard of z/OS", email = "henri@mainframesociety.com" }
+]
+keywords = ["racf", "zos", "mainframe", "security", "audit", "cis", "stig"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: System :: Systems Administration",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "mfpandas",
+    "pandas",
+    "pyyaml",
+    "jinja2",
+    "weasyprint",
+]
+
+[project.optional-dependencies]
+pdf-xhtml = ["xhtml2pdf"]
+docs = ["mkdocs"]
+
+[project.scripts]
+mfaudit = "mfaudit.cli:main"
+
+[project.urls]
+Homepage      = "https://github.com/wizardofzos/mfaudit"
+Documentation = "https://mfaudit.readthedocs.io/"
+Repository    = "https://github.com/wizardofzos/mfaudit"
+Issues        = "https://github.com/wizardofzos/mfaudit/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mfaudit*"]
+
+[tool.setuptools.package-data]
+"mfaudit" = [
+    "templates/*.j2",
+    "assets/*.css",
+    "controls/*.yaml",
+]

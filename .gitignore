@@ -1,0 +1,35 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.pickle
+
+# Runtime outputs — may contain sensitive RACF data
+out/
+site_controls.yaml
+site_config.yaml
+
+# Runtime input data — never commit real RACF exports
+SETROPTS
+IRRDBU00
+*.irrdbu00
+*.unl
+test_setropts_data
+test_irrdbu00_data
+test_dcollect_data
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Claude Code internals
+.claude/
+claude.md

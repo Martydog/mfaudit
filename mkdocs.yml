@@ -1,0 +1,56 @@
+site_name: MFAudit
+site_description: Automated RACF security audit tool — CIS Benchmarks
+site_author: Wizard of z/OS
+site_url: https://mfaudit.readthedocs.io/
+
+repo_url: https://github.com/wizardofzos/mfaudit
+repo_name: wizardofzos/mfaudit
+edit_uri: edit/main/docs/
+
+theme:
+  name: readthedocs
+
+nav:
+  - Home: index.md
+  - Getting started:
+    - Installation: installation.md
+    - Quick start: quickstart.md
+  - Usage: usage.md
+  - Controls:
+    - Overview: controls/index.md
+    - CIS Benchmarks (46): controls/cis.md
+    - Custom controls: controls/custom.md
+  - Authoring controls:
+    - Overview: authoring/index.md
+    - Full YAML schema: authoring/schema.md
+    - Python engine: authoring/python-engine.md
+  - Examples:
+    - Overview: examples/index.md
+    - Easy (pandas_query): examples/easy.md
+    - Hard (python engine): examples/hard.md
+  - Report output: report.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+
+plugins:
+  - search:
+      prebuild_index: true
+
+extra:
+  homepage: https://github.com/wizardofzos/mfaudit

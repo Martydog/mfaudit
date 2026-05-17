@@ -1,0 +1,38 @@
+controls:
+  - control_id: CUSTOM-AC-1
+    title: "B-prefixed user IDs must not hold permits on C-prefixed dataset profiles"
+    severity: high
+    requirement: >
+      User IDs beginning with 'B' (batch service accounts) must not appear on
+      the access list of any dataset profile whose name begins with 'C'
+      (customer data). Batch accounts must be restricted to operational datasets
+      only; access to customer data requires explicit business justification and
+      a non-batch identity.
+    custom:
+      benchmark: "Internal Access Control Policy"
+      category:  "Access Control"
+      reference: "IAC-DS-001"
+    data_sources_needed: [irrdbu00]
+    implementation:
+      engine: python
+      dataset: irrdbu00.datasetAccess
+      select_columns: [DSACC_NAME, DSACC_AUTH_ID, DSACC_ACCESS]
+      logic: |
+        findings_df = df[
+            df['DSACC_AUTH_ID'].str.upper().str.startswith('B') &
+            df['DSACC_NAME'].str.upper().str.startswith('C')
+        ][['DSACC_NAME', 'DSACC_AUTH_ID', 'DSACC_ACCESS']]
+        findings = findings_df.sort_values(['DSACC_NAME', 'DSACC_AUTH_ID']).to_dict('records')
+        count = len(findings_df)
+        status = 'PASS' if count == 0 else 'FAIL'
+        detail = f"{count} permit(s) found where a B-user has access to a C-dataset profile"
+      assertion:
+        type: python_result
+        pass_message: "No B-prefixed users hold permits on C-prefixed dataset profiles"
+        fail_message: "{count} permit(s) found — B-user(s) accessing C-dataset profile(s)"
+    remediation: >
+      For each finding, remove the permit:
+        PERMIT '<dataset-profile>' ID(<userid>) DELETE
+      If access is genuinely required, raise a business justification and
+      re-assign it to a non-B-prefixed identity.
+

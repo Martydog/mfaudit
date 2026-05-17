@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RACF Security Audit – {{ system_name }}</title>
+  <link rel="stylesheet" href="../assets/report.css">
+</head>
+<body>
+
+  <!-- ── COVER PAGE ─────────────────────────────────────────────────────── -->
+  <div class="cover page-break">
+    <div class="cover-logo">⬛ MFAudit</div>
+    <h1 class="cover-title">RACF Security Audit Report</h1>
+    <p class="cover-subtitle">Created with mfaudit (https://github.com/wizardofzos/mfaudit)</p>
+    <table class="cover-meta">
+      <tr><th>System / Sysplex</th><td>{{ system_name }}</td></tr>
+      <tr><th>Report Date</th><td>{{ report_date }}</td></tr>
+      <tr><th>Generated At</th><td>{{ generated_at }}</td></tr>
+      <tr><th>Controls File</th><td>{{ controls_file }}</td></tr>
+    </table>
+    <div class="cover-score
+      {% if score_pct >= 80 %}score-good{% elif score_pct >= 60 %}score-warn{% else %}score-bad{% endif %}">
+      {{ score_pct }}%
+      <span class="score-label">Compliance Score</span>
+    </div>
+    {% if anonymized %}
+    <div class="anon-banner">
+      &#128274; ANONYMIZED REPORT — All user IDs, group names, and profile names
+      have been replaced with stable labels (USR-NNNN, GRP-NNNN, PRF-NNNN).
+      Pass/Fail results and finding counts are accurate and unmodified.
+      This report is safe to share externally.
+    </div>
+    {% endif %}
+    <p class="cover-disclaimer">
+      This report is produced by automated analysis of RACF runtime data.
+      REVIEW items require human judgement. Findings should be validated
+      by a qualified RACF security administrator before remediation.
+    </p>
+  </div>
+
+  <!-- ── EXECUTIVE SUMMARY ──────────────────────────────────────────────── -->
+  <div class="section page-break">
+    {% if anonymized %}
+    <div class="anon-notice">
+      &#128274; <strong>Anonymized report</strong> — User IDs, group names, and profile names
+      in findings have been replaced with stable labels (USR-NNNN / GRP-NNNN / PRF-NNNN).
+      All counts, statuses, and SETROPTS values are original and unmodified.
+    </div>
+    {% endif %}
+    <h2>Executive Summary</h2>
+    <div class="summary-grid">
+      <div class="summary-card card-pass">
+        <div class="card-number">{{ passed }}</div>
+        <div class="card-label">PASS</div>
+      </div>
+      <div class="summary-card card-fail">
+        <div class="card-number">{{ failed }}</div>
+        <div class="card-label">FAIL</div>
+      </div>
+      <div class="summary-card card-review">
+        <div class="card-number">{{ review }}</div>
+        <div class="card-label">REVIEW</div>
+      </div>
+      <div class="summary-card card-skip">
+        <div class="card-number">{{ skipped }}</div>
+        <div class="card-label">SKIP</div>
+      </div>
+      <div class="summary-card card-error">
+        <div class="card-number">{{ errors }}</div>
+        <div class="card-label">ERROR</div>
+      </div>
+    </div>
+
+    <h3>Controls Overview</h3>
+    <table class="overview-table">
+      <thead>
+        <tr>
+          <th>Control ID</th>
+          <th>Title</th>
+          <th>Category</th>
+          <th>Severity</th>
+          <th>Sources</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in results %}
+        <tr class="row-{{ r.status | lower }}">
+          <td class="mono">{{ r.control_id }}</td>
+          <td>{{ r.title }}</td>
+          <td class="center">{{ r.cis_section or r.custom_category or '—' }}</td>
+          <td class="center sev-{{ r.severity }}">{{ r.severity }}</td>
+          <td class="center mono small">{{ r.data_sources_needed | join(', ') }}</td>
+          <td class="center">
+            <span class="badge badge-{{ r.status | lower }}">{{ r.status }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── DETAILED FINDINGS ──────────────────────────────────────────────── -->
+  <div class="section">
+    <h2>Detailed Findings</h2>
+
+    {% for r in results %}
+    <div class="control-card status-border-{{ r.status | lower }}">
+
+      <div class="control-header">
+        <div class="control-id-block">
+          <span class="control-id">{{ r.control_id }}</span>
+          <span class="badge badge-{{ r.status | lower }}">{{ r.status }}</span>
+          {% if r.severity %}
+          <span class="badge sev-badge sev-{{ r.severity }}">{{ r.severity }}</span>
+          {% endif %}
+        </div>
+        <div class="control-title">{{ r.title }}</div>
+        <div class="control-meta">
+          {% if r.cis_section %}CIS {{ r.cis_section }} &nbsp;·&nbsp;{% endif %}
+          {% if r.custom_benchmark %}{{ r.custom_benchmark }}{% if r.custom_reference %} &nbsp;·&nbsp; Ref: <span class="mono">{{ r.custom_reference }}</span>{% endif %} &nbsp;·&nbsp;{% endif %}
+          {% if r.stig_rule_id and r.stig_rule_id != 'N/A' %}STIG {{ r.stig_rule_id }} &nbsp;·&nbsp;{% endif %}
+          Source(s): <span class="mono">{{ r.data_sources_needed | join(', ') }}</span>
+        </div>
+      </div>
+
+      <div class="control-body">
+
+        {% if r.requirement %}
+        <div class="field-group">
+          <div class="field-label">Requirement</div>
+          <div class="field-value">{{ r.requirement | trim }}</div>
+        </div>
+        {% endif %}
+
+        <div class="field-group">
+          <div class="field-label">Result Detail</div>
+          <div class="field-value {% if r.status == STATUS_PASS %}text-pass{% elif r.status == STATUS_FAIL %}text-fail{% elif r.status == STATUS_REVIEW %}text-review{% endif %}">
+            {{ r.detail if r.detail else '—' }}
+          </div>
+        </div>
+
+        {% if r.findings %}
+        <div class="field-group">
+          <div class="field-label">
+            Findings
+            <span class="findings-count">({{ r.findings | length }} row(s))</span>
+          </div>
+          <div class="findings-table-wrap">
+            <table class="findings-table">
+              <thead>
+                <tr>
+                  {% for col in r.findings[0].keys() %}
+                  <th>{{ col }}</th>
+                  {% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in r.findings[:50] %}
+                <tr>
+                  {% for val in row.values() %}
+                  <td class="mono">{{ val }}</td>
+                  {% endfor %}
+                </tr>
+                {% endfor %}
+                {% if r.findings | length > 50 %}
+                <tr>
+                  <td colspan="{{ r.findings[0].keys() | list | length }}" class="truncated">
+                    … {{ r.findings | length - 50 }} more row(s) truncated. See CSV output for full list.
+                  </td>
+                </tr>
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% endif %}
+
+        {% if r.remediation and r.status != STATUS_PASS and r.status != STATUS_SKIP %}
+        <div class="field-group remediation">
+          <div class="field-label">Remediation</div>
+          <div class="field-value">
+            <pre>{{ r.remediation | trim }}</pre>
+          </div>
+        </div>
+        {% endif %}
+
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- ── FOOTER ─────────────────────────────────────────────────────────── -->
+  <div class="report-footer">
+    <p>
+      MFAudit &nbsp;·&nbsp; Generated {{ generated_at }} &nbsp;·&nbsp;
+      CIS Benchmark for z/OS v2.5.0 — Phase 1 &nbsp;·&nbsp;
+      System: {{ system_name }}
+    </p>
+    <p class="footer-disclaimer">
+      This is an automated audit output. All findings must be validated by a
+      qualified RACF security administrator. This report does not constitute
+      a formal security assessment.
+    </p>
+  </div>
+
+</body>
+</html>

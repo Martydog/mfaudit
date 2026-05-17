@@ -1,0 +1,74 @@
+# MFAudit — Example custom control definitions.
+# Copyright (C) 2026  Wizard of z/OS <henri@mainframesociety.com>
+#
+# This file is part of MFAudit, licensed under the GNU Affero General Public
+# License v3 or later. See LICENSE or <https://www.gnu.org/licenses/>.
+
+controls:
+  - control_id: CUSTOM-AC-1
+    title: "B-prefixed users must not access C-prefixed dataset profiles (direct or via group)"
+    severity: high
+    custom:
+      benchmark: "Internal Access Control Policy"
+      category:  "Access Control"
+      reference: "IAC-DS-001"
+    data_sources_needed: [irrdbu00]
+    implementation:
+      engine: python
+      dataset: irrdbu00.datasetAccess
+      select_columns: [DSACC_NAME, DSACC_AUTH_ID, DSACC_ACCESS, VIA_GROUP]
+      assertion:
+        type: python_result
+        pass_message: "No B-prefixed users access C-prefixed dataset profiles (direct or via group)"
+        fail_message:  "B-user(s) found with access to C-dataset profile(s)"
+      logic: |
+        # All access list entries for C-prefixed dataset profiles
+        c_access = df[df['DSACC_NAME'].str.upper().str.startswith('C')].copy()
+
+        # --- Direct hits: B-prefixed user IDs on the access list ---
+        direct = c_access[
+            c_access['DSACC_AUTH_ID'].str.upper().str.startswith('B')
+        ][['DSACC_NAME', 'DSACC_AUTH_ID', 'DSACC_ACCESS']].copy()
+        direct['VIA_GROUP'] = ''
+
+        # --- Indirect hits: groups on the access list that contain B-prefixed members ---
+        # Candidates: access list entries that are NOT already a direct B-user
+        potential_groups = c_access[
+            ~c_access['DSACC_AUTH_ID'].str.upper().str.startswith('B')
+        ]
+
+        # connectData: one row per user-group connection
+        # USCON_NAME = user ID, USCON_GRP_ID = group name
+        connect = irrdbu00.connectData
+        b_members = connect[connect['USCON_NAME'].str.upper().str.startswith('B')]
+
+        # Merge: keep only groups that actually have B-prefixed members
+        indirect = potential_groups.merge(
+            b_members[['USCON_GRP_ID', 'USCON_NAME']],
+            left_on='DSACC_AUTH_ID',
+            right_on='USCON_GRP_ID',
+            how='inner'
+        )
+        indirect = indirect[['DSACC_NAME', 'USCON_NAME', 'DSACC_ACCESS', 'DSACC_AUTH_ID']].copy()
+        indirect.columns = ['DSACC_NAME', 'DSACC_AUTH_ID', 'DSACC_ACCESS', 'VIA_GROUP']
+
+        # Combine, sort, emit
+        all_df = pd.concat([direct, indirect], ignore_index=True)
+        all_df = all_df.sort_values(['DSACC_NAME', 'VIA_GROUP', 'DSACC_AUTH_ID'])
+
+        count        = len(all_df)
+        direct_count = len(direct)
+        group_count  = len(indirect)
+        status  = 'PASS' if count == 0 else 'FAIL'
+        detail  = (
+            f"{count} B-user access(es) to C-dataset profiles "
+            f"({direct_count} direct, {group_count} via group)"
+        )
+        findings = all_df.to_dict('records')
+    remediation: >
+      For each finding, remove the permit:
+        PERMIT '<dataset-profile>' ID(<userid-or-group>) DELETE
+      If the finding is via a group, either remove the B-user from the group
+      or remove the group from the dataset profile access list.
+      If access is genuinely required, raise a business justification and
+      re-assign it to a non-B-prefixed identity.

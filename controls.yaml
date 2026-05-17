@@ -1,0 +1,1687 @@
+# MFAudit — CIS z/OS Benchmark control definitions.
+# Copyright (C) 2026  Wizard of z/OS <henri@mainframesociety.com>
+#
+# This file is part of MFAudit, licensed under the GNU Affero General Public
+# License v3 or later. See LICENSE or <https://www.gnu.org/licenses/>.
+#
+# MFAudit Controls
+# Sources:
+#   CIS IBM z/OS V2R5 with RACF Benchmark v1.0.0 / v1.1.0
+#   CIS IBM Db2 13 for z/OS Benchmark v1.0.0
+#   CIS IBM CICS Transaction Server 6.1 Benchmark v1.1.0
+# Each control must name the exact mfpandas dataframe + column(s) it uses.
+# Runtime data sources: setropts (SETROPTS), irrdbu00 (IRRDBU00)
+# No STIG files are read or parsed at runtime.
+
+controls:
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # SECTION 1.1 – PASSWORD CONTROL
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - control_id: CIS-1.1.1
+    title: "Ensure PASSWORD(INTERVAL) is set to no longer than 90 days"
+    stig:
+      rule_id: V-223727
+      severity: medium
+      requirement_excerpt: >
+        The PASSWORD(INTERVAL(n)) command sets the maximum age of a password.
+        Set to 90 days or fewer.
+    cis:
+      section: "1.1.1"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: pandas_query
+      dataset: setropts.fieldInfo
+      select_columns: [Setting, Value]
+      filter: "Setting == 'INTERVAL'"
+      assertion:
+        type: scalar_compare
+        operator: "<="
+        expected: 90
+        fail_message: "PASSWORD INTERVAL exceeds 90 days (value: {value})"
+        pass_message: "PASSWORD INTERVAL is {value} days (≤ 90)"
+    remediation: >
+      Issue: SETROPTS PASSWORD(INTERVAL(90))
+      Adjust the value down to 90 or fewer to meet the benchmark.
+
+  - control_id: CIS-1.1.2
+    title: "Ensure PASSWORD(HISTORY) is set to at least 4"
+    stig:
+      rule_id: V-223728
+      severity: medium
+      requirement_excerpt: >
+        Set the PASSWORD(HISTORY(n)) RACF option to 4 or more to prevent
+        reuse of recent passwords.
+    cis:
+      section: "1.1.2"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: pandas_query
+      dataset: setropts.fieldInfo
+      select_columns: [Setting, Value]
+      filter: "Setting == 'HISTORY'"
+      assertion:
+        type: scalar_compare
+        operator: ">="
+        expected: 4
+        fail_message: "PASSWORD HISTORY is {value} (must be ≥ 4)"
+        pass_message: "PASSWORD HISTORY is {value} (≥ 4)"
+    remediation: >
+      Issue: SETROPTS PASSWORD(HISTORY(4))
+
+  - control_id: CIS-1.1.3
+    title: "Ensure PASSWORD(RULEn) values are set"
+    stig:
+      rule_id: V-223724
+      severity: medium
+      requirement_excerpt: >
+        RACF password rules (RULE1–RULE8) enforce password complexity.
+        At least one rule must be defined and RULES must be active.
+    cis:
+      section: "1.1.3"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.fieldInfo
+      select_columns: [Setting, Value]
+      logic: |
+        rules_active = df.loc[df['Setting'] == 'RULES', 'Value'].values
+        rule_rows = df[df['Setting'].str.match(r'^RULE\d$') & (df['Value'] != 'FALSE')]
+        if len(rules_active) > 0 and rules_active[0] == 'TRUE' and len(rule_rows) > 0:
+            status = 'PASS'
+            detail = f"RULES=TRUE and {len(rule_rows)} rule(s) defined"
+        else:
+            status = 'FAIL'
+            detail = f"RULES={rules_active[0] if len(rules_active) else 'NOT SET'}, active rules: {len(rule_rows)}"
+        findings = rule_rows[['Setting','Value']].to_dict('records')
+      assertion:
+        type: python_result
+        pass_message: "Password rules active and at least one rule defined"
+        fail_message: "Password rules not active or no rules defined"
+    remediation: >
+      Issue: SETROPTS PASSWORD(RULES(RULE1(...)))
+      Define at least one password rule to enforce complexity requirements.
+
+  - control_id: CIS-1.1.4
+    title: "Ensure PASSWORD(MINCHANGE) is greater than zero"
+    stig:
+      rule_id: V-223726
+      severity: medium
+      requirement_excerpt: >
+        The MINCHANGE suboperand specifies the minimum number of days before
+        a user can change their password again. Must be > 0.
+    cis:
+      section: "1.1.4"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: pandas_query
+      dataset: setropts.fieldInfo
+      select_columns: [Setting, Value]
+      filter: "Setting == 'MINCHANG'"
+      assertion:
+        type: scalar_compare
+        operator: ">"
+        expected: 0
+        fail_message: "PASSWORD MINCHANGE is {value} (must be > 0)"
+        pass_message: "PASSWORD MINCHANGE is {value} days"
+    remediation: >
+      Issue: SETROPTS PASSWORD(MINCHANGE(1))
+
+  - control_id: CIS-1.1.5
+    title: "Ensure PASSWORD(REVOKE) is specified"
+    stig:
+      rule_id: V-223695
+      severity: medium
+      requirement_excerpt: >
+        The REVOKE suboperand specifies the number of consecutive unsuccessful
+        logon attempts that cause RACF to revoke the user ID. Must not be FALSE.
+    cis:
+      section: "1.1.5"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.fieldInfo
+      select_columns: [Setting, Value]
+      logic: |
+        row = df.loc[df['Setting'] == 'REVOKE', 'Value']
+        val = row.values[0] if len(row) > 0 else 'FALSE'
+        try:
+            ival = int(val)
+            status = 'PASS' if ival > 0 else 'FAIL'
+            detail = f"REVOKE={val}"
+        except:
+            status = 'FAIL'
+            detail = f"REVOKE={val} (not set or FALSE)"
+        findings = [{'Setting': 'REVOKE', 'Value': val}]
+      assertion:
+        type: python_result
+        pass_message: "PASSWORD REVOKE is active (value: {value})"
+        fail_message: "PASSWORD REVOKE is not set or is FALSE"
+    remediation: >
+      Issue: SETROPTS PASSWORD(REVOKE(5))
+      Recommended value is 5 or fewer consecutive failures.
+
+  - control_id: CIS-1.1.6
+    title: "Ensure KDFAES algorithm is used for password encryption"
+    stig:
+      rule_id: V-223729
+      severity: high
+      requirement_excerpt: >
+        KDFAES is the strongest password protection algorithm available.
+        The PWDALG setting must reflect KDFAES.
+    cis:
+      section: "1.1.6"
+      level: L2
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.fieldInfo
+      select_columns: [Setting, Value]
+      logic: |
+        row = df.loc[df['Setting'] == 'PWDALG', 'Value']
+        val = str(row.values[0]).upper() if len(row) > 0 else ''
+        status = 'PASS' if 'KDFAES' in val else 'FAIL'
+        detail = f"PWDALG={val}"
+        findings = [{'Setting': 'PWDALG', 'Value': val}]
+      assertion:
+        type: python_result
+        pass_message: "Password algorithm is KDFAES"
+        fail_message: "Password algorithm is not KDFAES (value: {value})"
+    remediation: >
+      Issue: SETROPTS PASSWORD(ALGORITHM(KDFAES))
+      Note: All existing passwords will need to be reset after this change.
+
+  - control_id: CIS-1.1.7
+    title: "Ensure PASSWORD(WARNING) is set"
+    stig:
+      rule_id: V-275
+      severity: low
+      requirement_excerpt: >
+        The WARNING suboperand specifies the number of days before password
+        expiry that RACF warns the user. Must not be FALSE.
+    cis:
+      section: "1.1.7"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.fieldInfo
+      select_columns: [Setting, Value]
+      logic: |
+        row = df.loc[df['Setting'] == 'WARNING', 'Value']
+        val = row.values[0] if len(row) > 0 else 'FALSE'
+        try:
+            ival = int(val)
+            status = 'PASS' if ival > 0 else 'FAIL'
+            detail = f"WARNING={val} days"
+        except:
+            status = 'FAIL'
+            detail = f"WARNING={val} (not set)"
+        findings = [{'Setting': 'WARNING', 'Value': val}]
+      assertion:
+        type: python_result
+        pass_message: "PASSWORD WARNING is set to {value} days"
+        fail_message: "PASSWORD WARNING is not set"
+    remediation: >
+      Issue: SETROPTS PASSWORD(WARNING(14))
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # SECTION 1.2 – SYSTEM SETTINGS
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - control_id: CIS-1.2.1
+    title: "Ensure that Inactive users are automatically revoked"
+    stig:
+      rule_id: V-223723
+      severity: medium
+      requirement_excerpt: >
+        SETROPTS INACTIVE(n) causes RACF to automatically revoke user IDs that
+        have not logged on within n days. Must be set (not FALSE).
+    cis:
+      section: "1.2.1"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.fieldInfo
+      select_columns: [Setting, Value]
+      logic: |
+        row = df.loc[df['Setting'] == 'INACTIVE', 'Value']
+        val = row.values[0] if len(row) > 0 else 'FALSE'
+        try:
+            ival = int(val)
+            status = 'PASS' if ival > 0 else 'FAIL'
+            detail = f"INACTIVE={val} days"
+        except:
+            status = 'FAIL'
+            detail = f"INACTIVE={val} (disabled)"
+        findings = [{'Setting': 'INACTIVE', 'Value': val}]
+      assertion:
+        type: python_result
+        pass_message: "Inactive user revocation is active ({value} days)"
+        fail_message: "Inactive user revocation is DISABLED"
+    remediation: >
+      Issue: SETROPTS INACTIVE(60)
+      Recommended: 60 days or fewer.
+
+  - control_id: CIS-1.2.5
+    title: "Ensure started tasks defined with TRUSTED attribute are justified"
+    stig:
+      rule_id: V-223661
+      severity: medium
+      requirement_excerpt: >
+        The TRUSTED attribute grants a started task the ability to bypass RACF
+        access checking. Its use must be minimized and justified.
+    cis:
+      section: "1.2.5"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [irrdbu00]
+    implementation:
+      engine: python
+      dataset: irrdbu00.generalSTDATA
+      select_columns: [GRST_NAME, GRST_CLASS_NAME, GRST_USER_ID, GRST_GROUP_ID, GRST_TRUSTED]
+      logic: |
+        findings_df = df[df['GRST_TRUSTED'] == 'YES'][['GRST_NAME','GRST_USER_ID','GRST_GROUP_ID','GRST_TRUSTED']]
+        findings = findings_df.to_dict('records')
+        count = len(findings_df)
+        status = 'PASS' if count == 0 else 'REVIEW'
+        detail = f"{count} STARTED profile(s) with TRUSTED=YES"
+      assertion:
+        type: python_result
+        pass_message: "No TRUSTED started tasks found"
+        fail_message: "{count} STARTED task(s) have TRUSTED attribute — review for justification"
+    remediation: >
+      Review each STARTED profile with TRUSTED=YES. Remove TRUSTED where not required.
+      Use PRIVILEGED only if TRUSTED is insufficient and remove where not needed.
+
+  - control_id: CIS-1.2.6
+    title: "Ensure OPERCMDS resource class is ACTIVE and RACLISTed"
+    stig:
+      rule_id: V-223658
+      severity: medium
+      requirement_excerpt: >
+        The OPERCMDS class must be active and RACLISTed to protect MVS operator
+        commands from unauthorized use.
+    cis:
+      section: "1.2.6"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.classInfo
+      select_columns: [name, CLASSACT, RACLIST]
+      logic: |
+        row = df[df['name'] == 'OPERCMDS']
+        if len(row) == 0:
+            status = 'FAIL'
+            detail = "OPERCMDS class not found in SETROPTS"
+            findings = [{'name': 'OPERCMDS', 'CLASSACT': 'NOT SET', 'RACLIST': 'NOT SET'}]
+        else:
+            act = row['CLASSACT'].values[0]
+            rac = row['RACLIST'].values[0]
+            status = 'PASS' if act == 'YES' and rac == 'YES' else 'FAIL'
+            detail = f"CLASSACT={act}, RACLIST={rac}"
+            findings = row[['name','CLASSACT','RACLIST']].to_dict('records')
+      assertion:
+        type: python_result
+        pass_message: "OPERCMDS is ACTIVE and RACLISTed"
+        fail_message: "OPERCMDS is not properly activated (CLASSACT={CLASSACT}, RACLIST={RACLIST})"
+    remediation: >
+      Issue: SETROPTS CLASSACT(OPERCMDS) RACLIST(OPERCMDS)
+
+  - control_id: CIS-1.2.7
+    title: "Ensure CONSOLE resource class is ACTIVE"
+    stig:
+      rule_id: V-223659
+      severity: medium
+      requirement_excerpt: >
+        The CONSOLE class must be active to protect MCS console access.
+    cis:
+      section: "1.2.7"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.classInfo
+      select_columns: [name, CLASSACT]
+      logic: |
+        row = df[df['name'] == 'CONSOLE']
+        if len(row) == 0:
+            status = 'FAIL'
+            detail = "CONSOLE class not found in SETROPTS"
+            findings = [{'name': 'CONSOLE', 'CLASSACT': 'NOT SET'}]
+        else:
+            act = row['CLASSACT'].values[0]
+            status = 'PASS' if act == 'YES' else 'FAIL'
+            detail = f"CLASSACT={act}"
+            findings = row[['name','CLASSACT']].to_dict('records')
+      assertion:
+        type: python_result
+        pass_message: "CONSOLE class is ACTIVE"
+        fail_message: "CONSOLE class is not ACTIVE"
+    remediation: >
+      Issue: SETROPTS CLASSACT(CONSOLE)
+
+  - control_id: CIS-1.2.8
+    title: "Ensure FACILITY resource class is ACTIVE and RACLISTed"
+    stig:
+      rule_id: V-223657
+      severity: high
+      requirement_excerpt: >
+        The FACILITY class must be active and RACLISTed to protect critical
+        system resources and installation-defined facilities.
+    cis:
+      section: "1.2.8"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.classInfo
+      select_columns: [name, CLASSACT, RACLIST]
+      logic: |
+        row = df[df['name'] == 'FACILITY']
+        if len(row) == 0:
+            status = 'FAIL'
+            detail = "FACILITY class not found in SETROPTS"
+            findings = [{'name': 'FACILITY', 'CLASSACT': 'NOT SET', 'RACLIST': 'NOT SET'}]
+        else:
+            act = row['CLASSACT'].values[0]
+            rac = row['RACLIST'].values[0]
+            status = 'PASS' if act == 'YES' and rac == 'YES' else 'FAIL'
+            detail = f"CLASSACT={act}, RACLIST={rac}"
+            findings = row[['name','CLASSACT','RACLIST']].to_dict('records')
+      assertion:
+        type: python_result
+        pass_message: "FACILITY is ACTIVE and RACLISTed"
+        fail_message: "FACILITY is not properly activated"
+    remediation: >
+      Issue: SETROPTS CLASSACT(FACILITY) RACLIST(FACILITY)
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # SECTION 1.3 – USER ATTRIBUTES
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - control_id: CIS-1.3.1
+    title: "Ensure use of RACF SPECIAL attribute is minimized"
+    stig:
+      rule_id: V-223713
+      severity: high
+      requirement_excerpt: >
+        The SPECIAL attribute grants unrestricted access to all RACF functions.
+        Assignment must be strictly limited and justified.
+    cis:
+      section: "1.3.1"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [irrdbu00]
+    implementation:
+      engine: python
+      dataset: irrdbu00.users
+      select_columns: [USBD_NAME, USBD_SPECIAL, USBD_REVOKE]
+      logic: |
+        findings_df = df[(df['USBD_SPECIAL'] == 'YES') & (df['USBD_REVOKE'] == 'NO')][['USBD_NAME','USBD_SPECIAL','USBD_REVOKE']]
+        findings = findings_df.to_dict('records')
+        count = len(findings_df)
+        status = 'PASS' if count == 0 else 'REVIEW'
+        detail = f"{count} active user(s) with SPECIAL attribute"
+      assertion:
+        type: python_result
+        pass_message: "No active users have SPECIAL attribute"
+        fail_message: "{count} active user(s) have SPECIAL — review for justification"
+    remediation: >
+      Review each user with SPECIAL=YES. Remove SPECIAL from any user ID not explicitly
+      authorized to perform RACF administration.
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # SECTION 2.1 – DATA PROTECTION
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - control_id: CIS-2.1.3
+    title: "Ensure WHEN(PROGRAM) SETROPTS value is active"
+    stig:
+      rule_id: V-223708
+      severity: medium
+      requirement_excerpt: >
+        SETROPTS WHEN(PROGRAM) activates the PROGRAM class and enables
+        conditional access to datasets via a specific program.
+    cis:
+      section: "2.1.3"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.fieldInfo
+      select_columns: [Setting, Value]
+      logic: |
+        row = df.loc[df['Setting'] == 'WHENPROG', 'Value']
+        val = str(row.values[0]).upper() if len(row) > 0 else 'FALSE'
+        status = 'PASS' if val not in ('FALSE', '') else 'FAIL'
+        detail = f"WHENPROG={val}"
+        findings = [{'Setting': 'WHENPROG', 'Value': val}]
+      assertion:
+        type: python_result
+        pass_message: "WHEN(PROGRAM) is active"
+        fail_message: "WHEN(PROGRAM) is not active"
+    remediation: >
+      Issue: SETROPTS WHEN(PROGRAM)
+
+  - control_id: CIS-2.1.6
+    title: "Ensure ERASE(ALL) is set for data erasure on scratch"
+    stig:
+      rule_id: V-223731
+      severity: medium
+      requirement_excerpt: >
+        SETROPTS ERASE(ALL) causes RACF to erase data from DASD when a dataset
+        is scratched or released, preventing data remanence.
+    cis:
+      section: "2.1.6"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.fieldInfo
+      select_columns: [Setting, Value]
+      logic: |
+        erase_row = df.loc[df['Setting'] == 'ERASE', 'Value']
+        eraseall_row = df.loc[df['Setting'] == 'ERASEALL', 'Value']
+        erase = str(erase_row.values[0]).upper() if len(erase_row) > 0 else 'FALSE'
+        eraseall = str(eraseall_row.values[0]).upper() if len(eraseall_row) > 0 else 'FALSE'
+        status = 'PASS' if eraseall == 'TRUE' else 'FAIL'
+        detail = f"ERASE={erase}, ERASEALL={eraseall}"
+        findings = [{'Setting': 'ERASE', 'Value': erase}, {'Setting': 'ERASEALL', 'Value': eraseall}]
+      assertion:
+        type: python_result
+        pass_message: "ERASE(ALL) is active"
+        fail_message: "ERASE(ALL) is not active (ERASEALL={ERASEALL})"
+    remediation: >
+      Issue: SETROPTS ERASE(ALL)
+
+  - control_id: CIS-2.1.7
+    title: "Ensure TEMPDSN class is active"
+    stig:
+      rule_id: V-223660
+      severity: medium
+      requirement_excerpt: >
+        The TEMPDSN class must be active to protect temporary datasets from
+        unauthorized access.
+    cis:
+      section: "2.1.7"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.classInfo
+      select_columns: [name, CLASSACT]
+      logic: |
+        row = df[df['name'] == 'TEMPDSN']
+        if len(row) == 0:
+            status = 'FAIL'
+            detail = "TEMPDSN not found in SETROPTS"
+            findings = [{'name': 'TEMPDSN', 'CLASSACT': 'NOT SET'}]
+        else:
+            act = row['CLASSACT'].values[0]
+            status = 'PASS' if act == 'YES' else 'FAIL'
+            detail = f"CLASSACT={act}"
+            findings = row[['name','CLASSACT']].to_dict('records')
+      assertion:
+        type: python_result
+        pass_message: "TEMPDSN class is ACTIVE"
+        fail_message: "TEMPDSN class is not ACTIVE"
+    remediation: >
+      Issue: SETROPTS CLASSACT(TEMPDSN)
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # SECTION 2.2 – RESOURCE PROTECTION
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - control_id: CIS-2.2.2
+    title: "Ensure GENERIC is enabled for all ACTIVE classes"
+    stig:
+      rule_id: N/A
+      severity: medium
+      requirement_excerpt: >
+        Generic profile names (wildcards) must be enabled for each active class
+        to ensure broad, consistent resource coverage.
+    cis:
+      section: "2.2.2"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.classInfo
+      select_columns: [name, CLASSACT, GENERIC]
+      logic: |
+        active = df[df['CLASSACT'] == 'YES']
+        no_generic = active[active['GENERIC'] != 'YES'][['name','CLASSACT','GENERIC']]
+        findings = no_generic.to_dict('records')
+        count = len(no_generic)
+        status = 'PASS' if count == 0 else 'FAIL'
+        detail = f"{count} active class(es) without GENERIC enabled"
+      assertion:
+        type: python_result
+        pass_message: "All active classes have GENERIC enabled"
+        fail_message: "{count} active class(es) do not have GENERIC enabled"
+    remediation: >
+      For each class listed, issue: SETROPTS GENERIC(classname)
+
+  - control_id: CIS-2.2.4
+    title: "Ensure dataset PASSWORD protection is not used"
+    stig:
+      rule_id: V-223778
+      severity: medium
+      requirement_excerpt: >
+        The old RACF dataset-level PASSWORD field is a legacy mechanism that
+        must not be used. SETROPTS NOPASSWORD ensures this is enforced.
+    cis:
+      section: "2.2.4"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.fieldInfo
+      select_columns: [Setting, Value]
+      logic: |
+        # TAPEDSN=FALSE means tape password protection is off (desired)
+        row = df.loc[df['Setting'] == 'TAPEDSN', 'Value']
+        val = str(row.values[0]).upper() if len(row) > 0 else 'FALSE'
+        status = 'PASS' if val == 'FALSE' else 'FAIL'
+        detail = f"TAPEDSN={val} (should be FALSE)"
+        findings = [{'Setting': 'TAPEDSN', 'Value': val}]
+      assertion:
+        type: python_result
+        pass_message: "Tape dataset password protection is not in use (TAPEDSN=FALSE)"
+        fail_message: "Tape dataset password protection is active (TAPEDSN={value})"
+    remediation: >
+      Issue: SETROPTS NOTAPEDSN
+      Remove any dataset profiles relying on the PASSWORD field.
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # SECTION 2.3 – SYSTEM SETTINGS
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - control_id: CIS-2.3.1
+    title: "Ensure TERMINAL SETROPTS value is set to NONE"
+    stig:
+      rule_id: V-262
+      severity: medium
+      requirement_excerpt: >
+        SETROPTS TERMINAL(NONE) sets the universal access authority (UACC)
+        for undefined terminals to NONE, preventing unauthorized terminal access.
+    cis:
+      section: "2.3.1"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.fieldInfo
+      select_columns: [Setting, Value]
+      logic: |
+        row = df.loc[df['Setting'] == 'TERMINAL', 'Value']
+        val = str(row.values[0]).upper() if len(row) > 0 else 'NOT SET'
+        status = 'PASS' if val == 'NONE' else 'FAIL'
+        detail = f"TERMINAL={val} (required: NONE)"
+        findings = [{'Setting': 'TERMINAL', 'Value': val}]
+      assertion:
+        type: python_result
+        pass_message: "TERMINAL UACC is NONE"
+        fail_message: "TERMINAL UACC is {value} (must be NONE)"
+    remediation: >
+      Issue: SETROPTS TERMINAL(NONE)
+
+  - control_id: CIS-2.3.2
+    title: "Ensure GENCMD is enabled for all ACTIVE classes"
+    stig:
+      rule_id: V-260
+      severity: medium
+      requirement_excerpt: >
+        GENCMD allows the use of generic names in RACF commands for each class.
+        Must be enabled for all active classes.
+    cis:
+      section: "2.3.2"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.classInfo
+      select_columns: [name, CLASSACT, GENCMD]
+      logic: |
+        active = df[df['CLASSACT'] == 'YES']
+        no_gencmd = active[active['GENCMD'] != 'YES'][['name','CLASSACT','GENCMD']]
+        findings = no_gencmd.to_dict('records')
+        count = len(no_gencmd)
+        status = 'PASS' if count == 0 else 'FAIL'
+        detail = f"{count} active class(es) without GENCMD"
+      assertion:
+        type: python_result
+        pass_message: "All active classes have GENCMD enabled"
+        fail_message: "{count} active class(es) do not have GENCMD enabled"
+    remediation: >
+      For each class listed, issue: SETROPTS GENCMD(classname)
+
+  - control_id: CIS-2.3.3
+    title: "Ensure PROTECTALL is set to FAILURES"
+    stig:
+      rule_id: V-223704
+      severity: high
+      requirement_excerpt: >
+        SETROPTS PROTECTALL(FAILURES) ensures that access to unprotected
+        datasets results in a failure, forcing all datasets to be protected.
+    cis:
+      section: "2.3.3"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.fieldInfo
+      select_columns: [Setting, Value]
+      logic: |
+        row = df.loc[df['Setting'] == 'PROTALL', 'Value']
+        val = str(row.values[0]).upper() if len(row) > 0 else 'OFF'
+        status = 'PASS' if val == 'FAILURES' else 'FAIL'
+        detail = f"PROTALL={val} (required: FAILURES)"
+        findings = [{'Setting': 'PROTALL', 'Value': val}]
+      assertion:
+        type: python_result
+        pass_message: "PROTECTALL is set to FAILURES"
+        fail_message: "PROTECTALL is {value} (must be FAILURES)"
+    remediation: >
+      Issue: SETROPTS PROTECTALL(FAILURES)
+      Note: Ensure all datasets have RACF profiles before enabling, or jobs will fail.
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # SECTION 2.4 – USER PRIVILEGE
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - control_id: CIS-2.4.1
+    title: "Ensure OPERATIONS attribute assignment is tightly controlled"
+    stig:
+      rule_id: V-223714
+      severity: high
+      requirement_excerpt: >
+        The OPERATIONS attribute grants read/write access to all DASD datasets.
+        Its assignment must be strictly limited and justified.
+    cis:
+      section: "2.4.1"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [irrdbu00]
+    implementation:
+      engine: python
+      dataset: irrdbu00.users
+      select_columns: [USBD_NAME, USBD_OPER, USBD_REVOKE]
+      logic: |
+        findings_df = df[(df['USBD_OPER'] == 'YES') & (df['USBD_REVOKE'] == 'NO')][['USBD_NAME','USBD_OPER','USBD_REVOKE']]
+        findings = findings_df.to_dict('records')
+        count = len(findings_df)
+        status = 'PASS' if count == 0 else 'REVIEW'
+        detail = f"{count} active user(s) with OPERATIONS attribute"
+      assertion:
+        type: python_result
+        pass_message: "No active users have OPERATIONS attribute"
+        fail_message: "{count} active user(s) have OPERATIONS — review for justification"
+    remediation: >
+      Review each user with OPER=YES. Remove OPERATIONS from any user ID not explicitly
+      authorized to perform systems programming or equivalent functions.
+
+  - control_id: CIS-2.4.4
+    title: "Ensure UID 0 is only assigned to PROTECTED STC IDs"
+    stig:
+      rule_id: V-223756
+      severity: high
+      requirement_excerpt: >
+        UID(0) (superuser) must only be assigned to PROTECTED started task user
+        IDs, not to interactive users.
+    cis:
+      section: "2.4.4"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [irrdbu00]
+    implementation:
+      engine: python
+      dataset: irrdbu00.userOMVS + irrdbu00.users
+      select_columns: [USOMVS_NAME, USOMVS_UID, USBD_NOPWD]
+      logic: |
+        uid0 = omvs_df[omvs_df['USOMVS_UID'] == '0'][['USOMVS_NAME','USOMVS_UID']]
+        merged = uid0.merge(users_df[['USBD_NAME','USBD_NOPWD']], left_on='USOMVS_NAME', right_on='USBD_NAME', how='left')
+        not_protected = merged[merged['USBD_NOPWD'] != 'YES']
+        findings = not_protected[['USOMVS_NAME','USOMVS_UID','USBD_NOPWD']].to_dict('records')
+        count = len(not_protected)
+        status = 'PASS' if count == 0 else 'FAIL'
+        detail = f"{count} UID(0) user(s) that are NOT PROTECTED"
+      assertion:
+        type: python_result
+        pass_message: "All UID(0) accounts are PROTECTED"
+        fail_message: "{count} UID(0) account(s) are not PROTECTED"
+    remediation: >
+      For each non-PROTECTED UID(0) user, either:
+      - Add NOPASSWORD to the user profile to make it PROTECTED, or
+      - Change the OMVS UID to a non-zero value.
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # SECTION 3 – LOGGING AND AUDITING
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - control_id: CIS-3.2
+    title: "Ensure activity of SPECIAL users is being logged"
+    stig:
+      rule_id: V-223699
+      severity: medium
+      requirement_excerpt: >
+        SETROPTS SAUDIT causes RACF to log all RACF commands issued using
+        SPECIAL authority.
+    cis:
+      section: "3.2"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.fieldInfo
+      select_columns: [Setting, Value]
+      logic: |
+        row = df.loc[df['Setting'] == 'SAUDIT', 'Value']
+        val = str(row.values[0]).upper() if len(row) > 0 else 'FALSE'
+        status = 'PASS' if val == 'TRUE' else 'FAIL'
+        detail = f"SAUDIT={val}"
+        findings = [{'Setting': 'SAUDIT', 'Value': val}]
+      assertion:
+        type: python_result
+        pass_message: "SPECIAL user activity is logged (SAUDIT=TRUE)"
+        fail_message: "SPECIAL user activity is NOT logged (SAUDIT=FALSE)"
+    remediation: >
+      Issue: SETROPTS SAUDIT
+
+  - control_id: CIS-3.4
+    title: "Ensure activities of OPERATIONS users are logged"
+    stig:
+      rule_id: V-223694
+      severity: high
+      requirement_excerpt: >
+        SETROPTS OPERAUDT causes RACF to log all RACF commands and resource
+        accesses made using OPERATIONS authority.
+    cis:
+      section: "3.4"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.fieldInfo
+      select_columns: [Setting, Value]
+      logic: |
+        row = df.loc[df['Setting'] == 'OPERAUDT', 'Value']
+        val = str(row.values[0]).upper() if len(row) > 0 else 'FALSE'
+        status = 'PASS' if val == 'TRUE' else 'FAIL'
+        detail = f"OPERAUDT={val}"
+        findings = [{'Setting': 'OPERAUDT', 'Value': val}]
+      assertion:
+        type: python_result
+        pass_message: "OPERATIONS user activity is logged (OPERAUDT=TRUE)"
+        fail_message: "OPERATIONS user activity is NOT logged (OPERAUDT=FALSE)"
+    remediation: >
+      Issue: SETROPTS OPERAUDT
+
+  - control_id: CIS-3.5
+    title: "Ensure logon statistics are recorded"
+    stig:
+      rule_id: V-266
+      severity: medium
+      requirement_excerpt: >
+        SETROPTS INITSTATS causes RACF to record statistics on all user profiles
+        including last logon time and date.
+    cis:
+      section: "3.5"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.fieldInfo
+      select_columns: [Setting, Value]
+      logic: |
+        row = df.loc[df['Setting'] == 'INITSTAT', 'Value']
+        val = str(row.values[0]).upper() if len(row) > 0 else 'FALSE'
+        status = 'PASS' if val == 'TRUE' else 'FAIL'
+        detail = f"INITSTAT={val}"
+        findings = [{'Setting': 'INITSTAT', 'Value': val}]
+      assertion:
+        type: python_result
+        pass_message: "Logon statistics are recorded (INITSTAT=TRUE)"
+        fail_message: "Logon statistics are NOT recorded (INITSTAT=FALSE)"
+    remediation: >
+      Issue: SETROPTS INITSTATS
+
+  - control_id: CIS-3.6
+    title: "Ensure AUDITOR/ROAUDIT privilege is assigned only to authorized users"
+    stig:
+      rule_id: N/A
+      severity: medium
+      requirement_excerpt: >
+        The AUDITOR and ROAUDIT attributes grant access to RACF audit records
+        and audit controls. Assignment must be strictly limited.
+    cis:
+      section: "3.6"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [irrdbu00]
+    implementation:
+      engine: python
+      dataset: irrdbu00.users
+      select_columns: [USBD_NAME, USBD_AUDITOR, USBD_ROAUDIT, USBD_REVOKE]
+      logic: |
+        findings_df = df[
+            ((df['USBD_AUDITOR'] == 'YES') | (df['USBD_ROAUDIT'] == 'YES')) &
+            (df['USBD_REVOKE'] == 'NO')
+        ][['USBD_NAME','USBD_AUDITOR','USBD_ROAUDIT','USBD_REVOKE']]
+        findings = findings_df.to_dict('records')
+        count = len(findings_df)
+        status = 'PASS' if count == 0 else 'REVIEW'
+        detail = f"{count} active user(s) with AUDITOR or ROAUDIT"
+      assertion:
+        type: python_result
+        pass_message: "No active users have AUDITOR/ROAUDIT attribute"
+        fail_message: "{count} active user(s) have AUDITOR or ROAUDIT — review for justification"
+    remediation: >
+      Review each user with AUDITOR=YES or ROAUDIT=YES. Remove from any user ID
+      not explicitly assigned an auditing mission.
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # SECTION 5 – STORAGE MANAGEMENT
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - control_id: CIS-5.3
+    title: "Ensure ADSP is set to NOADSP"
+    stig:
+      rule_id: V-223721
+      severity: high
+      requirement_excerpt: >
+        SETROPTS NOADSP ensures that new datasets are not automatically
+        protected by RACF under the creating user's ID, which could result
+        in overly permissive access controls.
+    cis:
+      section: "5.3"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.fieldInfo
+      select_columns: [Setting, Value]
+      logic: |
+        row = df.loc[df['Setting'] == 'ADSP', 'Value']
+        val = str(row.values[0]).upper() if len(row) > 0 else 'FALSE'
+        status = 'PASS' if val == 'FALSE' else 'FAIL'
+        detail = f"ADSP={val} (should be FALSE/NOADSP)"
+        findings = [{'Setting': 'ADSP', 'Value': val}]
+      assertion:
+        type: python_result
+        pass_message: "ADSP is NOADSP (ADSP=FALSE)"
+        fail_message: "ADSP is active (ADSP={value}) — datasets auto-protected under user ID"
+    remediation: >
+      Issue: SETROPTS NOADSP
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # SECTION 7.3 – ICSF SECURITY CONFIGURATION
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - control_id: CIS-7.3.1
+    title: "Ensure CSFSERV class is active"
+    stig:
+      rule_id: N/A
+      severity: medium
+      requirement_excerpt: >
+        The CSFSERV class must be active to protect ICSF cryptographic services
+        from unauthorized access.
+    cis:
+      section: "7.3.1"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.classInfo
+      select_columns: [name, CLASSACT]
+      logic: |
+        row = df[df['name'] == 'CSFSERV']
+        if len(row) == 0:
+            status = 'FAIL'
+            detail = "CSFSERV not found in SETROPTS"
+            findings = [{'name': 'CSFSERV', 'CLASSACT': 'NOT SET'}]
+        else:
+            act = row['CLASSACT'].values[0]
+            status = 'PASS' if act == 'YES' else 'FAIL'
+            detail = f"CLASSACT={act}"
+            findings = row[['name','CLASSACT']].to_dict('records')
+      assertion:
+        type: python_result
+        pass_message: "CSFSERV class is ACTIVE"
+        fail_message: "CSFSERV class is not ACTIVE"
+    remediation: >
+      Issue: SETROPTS CLASSACT(CSFSERV)
+
+  - control_id: CIS-7.3.2
+    title: "Ensure CSFKEYS class is active"
+    stig:
+      rule_id: N/A
+      severity: medium
+      requirement_excerpt: >
+        The CSFKEYS class must be active to protect ICSF cryptographic key
+        labels from unauthorized use.
+    cis:
+      section: "7.3.2"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.classInfo
+      select_columns: [name, CLASSACT]
+      logic: |
+        row = df[df['name'] == 'CSFKEYS']
+        if len(row) == 0:
+            status = 'FAIL'
+            detail = "CSFKEYS not found in SETROPTS"
+            findings = [{'name': 'CSFKEYS', 'CLASSACT': 'NOT SET'}]
+        else:
+            act = row['CLASSACT'].values[0]
+            status = 'PASS' if act == 'YES' else 'FAIL'
+            detail = f"CLASSACT={act}"
+            findings = row[['name','CLASSACT']].to_dict('records')
+      assertion:
+        type: python_result
+        pass_message: "CSFKEYS class is ACTIVE"
+        fail_message: "CSFKEYS class is not ACTIVE"
+    remediation: >
+      Issue: SETROPTS CLASSACT(CSFKEYS)
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # SECTION 8 – JOB MANAGEMENT / JES2
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - control_id: CIS-8.2.1
+    title: "Ensure JESSPOOL class is active"
+    stig:
+      rule_id: V-223750
+      severity: high
+      requirement_excerpt: >
+        The JESSPOOL class must be active to protect JES2 spool resources
+        from unauthorized access or modification.
+    cis:
+      section: "8.2.1"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.classInfo
+      select_columns: [name, CLASSACT]
+      logic: |
+        row = df[df['name'] == 'JESSPOOL']
+        if len(row) == 0:
+            status = 'FAIL'
+            detail = "JESSPOOL not found in SETROPTS"
+            findings = [{'name': 'JESSPOOL', 'CLASSACT': 'NOT SET'}]
+        else:
+            act = row['CLASSACT'].values[0]
+            status = 'PASS' if act == 'YES' else 'FAIL'
+            detail = f"CLASSACT={act}"
+            findings = row[['name','CLASSACT']].to_dict('records')
+      assertion:
+        type: python_result
+        pass_message: "JESSPOOL class is ACTIVE"
+        fail_message: "JESSPOOL class is not ACTIVE"
+    remediation: >
+      Issue: SETROPTS CLASSACT(JESSPOOL)
+
+  - control_id: CIS-8.4.3
+    title: "Ensure JES(BATCHALLRACF) is set"
+    stig:
+      rule_id: V-223692
+      severity: high
+      requirement_excerpt: >
+        SETROPTS JES(BATCHALLRACF) requires RACF identification and
+        authentication for all batch jobs, preventing anonymous batch submission.
+    cis:
+      section: "8.4.3"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.fieldInfo
+      select_columns: [Setting, Value]
+      logic: |
+        row = df.loc[df['Setting'] == 'JESBATCH', 'Value']
+        val = str(row.values[0]).upper() if len(row) > 0 else 'FALSE'
+        status = 'PASS' if val == 'TRUE' else 'FAIL'
+        detail = f"JESBATCH={val}"
+        findings = [{'Setting': 'JESBATCH', 'Value': val}]
+      assertion:
+        type: python_result
+        pass_message: "JES(BATCHALLRACF) is active"
+        fail_message: "JES(BATCHALLRACF) is not active (JESBATCH={value})"
+    remediation: >
+      Issue: SETROPTS JES(BATCHALLRACF)
+
+  - control_id: CIS-8.4.4
+    title: "Ensure JES(XBMALLRACF) is set"
+    stig:
+      rule_id: V-223693
+      severity: high
+      requirement_excerpt: >
+        SETROPTS JES(XBMALLRACF) requires RACF identification for all jobs
+        submitted through the external batch manager.
+    cis:
+      section: "8.4.4"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.fieldInfo
+      select_columns: [Setting, Value]
+      logic: |
+        row = df.loc[df['Setting'] == 'JESXBM', 'Value']
+        val = str(row.values[0]).upper() if len(row) > 0 else 'FALSE'
+        status = 'PASS' if val == 'TRUE' else 'FAIL'
+        detail = f"JESXBM={val}"
+        findings = [{'Setting': 'JESXBM', 'Value': val}]
+      assertion:
+        type: python_result
+        pass_message: "JES(XBMALLRACF) is active"
+        fail_message: "JES(XBMALLRACF) is not active (JESXBM={value})"
+    remediation: >
+      Issue: SETROPTS JES(XBMALLRACF)
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # SECTION 9 – UNIX SYSTEM SERVICES
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - control_id: CIS-9.5
+    title: "Ensure newly assigned UIDs and GIDs are unique"
+    stig:
+      rule_id: N/A
+      severity: medium
+      requirement_excerpt: >
+        Each z/OS UNIX user must have a unique UID and each group a unique GID
+        to ensure proper access separation in the UNIX environment.
+    cis:
+      section: "9.5"
+      level: L1
+      benchmark: "CIS z/OS 2.5.0"
+    data_sources_needed: [irrdbu00]
+    implementation:
+      engine: python
+      dataset: irrdbu00.userOMVS + irrdbu00.groupOMVS
+      select_columns: [USOMVS_NAME, USOMVS_UID, GPOMVS_NAME, GPOMVS_GID]
+      logic: |
+        dup_uids = omvs_df[omvs_df.duplicated('USOMVS_UID', keep=False) & (omvs_df['USOMVS_UID'] != '0')][['USOMVS_NAME','USOMVS_UID']].sort_values('USOMVS_UID')
+        dup_gids = gomvs_df[gomvs_df.duplicated('GPOMVS_GID', keep=False)][['GPOMVS_NAME','GPOMVS_GID']].sort_values('GPOMVS_GID')
+        uid_count = len(dup_uids)
+        gid_count = len(dup_gids)
+        findings = dup_uids.to_dict('records') + dup_gids.to_dict('records')
+        status = 'PASS' if uid_count == 0 and gid_count == 0 else 'FAIL'
+        detail = f"{uid_count} duplicate UID(s) (non-zero), {gid_count} duplicate GID(s)"
+      assertion:
+        type: python_result
+        pass_message: "All UIDs and GIDs are unique"
+        fail_message: "{uid_count} duplicate UID(s) and {gid_count} duplicate GID(s) found"
+    remediation: >
+      Assign unique UIDs and GIDs to each user and group. Use ALTUSER to change UIDs
+      and ALTGROUP to change GIDs as needed.
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # SECTION 1.2 (v1.1.0 additions) – SYSTEM SETTINGS
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - control_id: CIS-1.2.2
+    title: "Ensure STARTED class is ACTIVE and RACLISTed"
+    stig:
+      rule_id: N/A
+      severity: medium
+      requirement_excerpt: >
+        The STARTED class must be active and RACLISTed so that RACF can assign
+        user IDs and group names to started tasks via STARTED class profiles,
+        replacing the legacy ICHRIN03 table.
+    cis:
+      section: "1.2.2"
+      level: L1
+      benchmark: "CIS IBM z/OS V2R5 with RACF v1.1.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.classInfo
+      select_columns: [name, CLASSACT, RACLIST]
+      logic: |
+        row = df[df['name'] == 'STARTED']
+        if len(row) == 0:
+            status = 'FAIL'
+            detail = "STARTED class not found in SETROPTS"
+            findings = [{'name': 'STARTED', 'CLASSACT': 'NOT SET', 'RACLIST': 'NOT SET'}]
+        else:
+            act = row['CLASSACT'].values[0]
+            rac = row['RACLIST'].values[0]
+            status = 'PASS' if act == 'YES' and rac == 'YES' else 'FAIL'
+            detail = f"CLASSACT={act}, RACLIST={rac}"
+            findings = row[['name','CLASSACT','RACLIST']].to_dict('records')
+      assertion:
+        type: python_result
+        pass_message: "STARTED class is ACTIVE and RACLISTed"
+        fail_message: "STARTED class is not properly activated (CLASSACT={CLASSACT}, RACLIST={RACLIST})"
+    remediation: >
+      Issue: SETROPTS CLASSACT(STARTED) RACLIST(STARTED)
+
+  - control_id: CIS-1.2.3
+    title: "Ensure PROPCNTL class is ACTIVE and RACLISTed"
+    stig:
+      rule_id: N/A
+      severity: medium
+      requirement_excerpt: >
+        The PROPCNTL class prevents propagation of RACF authority through
+        program calls. It must be active and RACLISTed to enforce authority
+        boundaries between programs.
+    cis:
+      section: "1.2.3"
+      level: L1
+      benchmark: "CIS IBM z/OS V2R5 with RACF v1.1.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.classInfo
+      select_columns: [name, CLASSACT, RACLIST]
+      logic: |
+        row = df[df['name'] == 'PROPCNTL']
+        if len(row) == 0:
+            status = 'FAIL'
+            detail = "PROPCNTL class not found in SETROPTS"
+            findings = [{'name': 'PROPCNTL', 'CLASSACT': 'NOT SET', 'RACLIST': 'NOT SET'}]
+        else:
+            act = row['CLASSACT'].values[0]
+            rac = row['RACLIST'].values[0]
+            status = 'PASS' if act == 'YES' and rac == 'YES' else 'FAIL'
+            detail = f"CLASSACT={act}, RACLIST={rac}"
+            findings = row[['name','CLASSACT','RACLIST']].to_dict('records')
+      assertion:
+        type: python_result
+        pass_message: "PROPCNTL class is ACTIVE and RACLISTed"
+        fail_message: "PROPCNTL class is not properly activated (CLASSACT={CLASSACT}, RACLIST={RACLIST})"
+    remediation: >
+      Issue: SETROPTS CLASSACT(PROPCNTL) RACLIST(PROPCNTL)
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # SECTION 1.3 (v1.1.0 addition) – USER ATTRIBUTES
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - control_id: CIS-1.3.4
+    title: "Ensure all STARTED class profiles specify PROTECTED user IDs"
+    stig:
+      rule_id: N/A
+      severity: high
+      requirement_excerpt: >
+        Every user ID assigned to a STARTED class profile must be PROTECTED
+        (NOPASSWORD/NOPHRASE) so it cannot be used for interactive logon,
+        preventing privilege escalation through started task identities.
+    cis:
+      section: "1.3.4"
+      level: L1
+      benchmark: "CIS IBM z/OS V2R5 with RACF v1.1.0"
+    data_sources_needed: [irrdbu00]
+    implementation:
+      engine: python
+      dataset: irrdbu00.generalSTDATA + irrdbu00.users
+      select_columns: [GRST_NAME, GRST_USER_ID, USBD_NOPWD]
+      logic: |
+        stc_users = df[df['GRST_CLASS_NAME'] == 'STARTED'][['GRST_NAME','GRST_USER_ID']].copy()
+        stc_users = stc_users[stc_users['GRST_USER_ID'].notna() & (stc_users['GRST_USER_ID'] != '')]
+        merged = stc_users.merge(
+            users_df[['USBD_NAME','USBD_NOPWD']],
+            left_on='GRST_USER_ID', right_on='USBD_NAME', how='left'
+        )
+        not_protected = merged[merged['USBD_NOPWD'] != 'YES'][['GRST_NAME','GRST_USER_ID','USBD_NOPWD']]
+        findings = not_protected.to_dict('records')
+        count = len(not_protected)
+        status = 'PASS' if count == 0 else 'FAIL'
+        detail = f"{count} STARTED profile(s) whose user ID is not PROTECTED"
+      assertion:
+        type: python_result
+        pass_message: "All STARTED profile user IDs are PROTECTED"
+        fail_message: "{count} STARTED profile(s) reference a non-PROTECTED user ID"
+    remediation: >
+      For each user ID listed, issue: ALTUSER <userid> NOPASSWORD NOPHRASE
+      This marks the user as PROTECTED and prevents interactive logon.
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # SECTION 3 (v1.1.0 additions) – LOGGING AND AUDITING
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - control_id: CIS-3.1
+    title: "Ensure command violations are logged (CMDVIOL)"
+    stig:
+      rule_id: N/A
+      severity: medium
+      requirement_excerpt: >
+        SETROPTS CMDVIOL causes RACF to log all command violations, providing
+        an audit trail of failed RACF command attempts by any user.
+    cis:
+      section: "3.1"
+      level: L1
+      benchmark: "CIS IBM z/OS V2R5 with RACF v1.1.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.fieldInfo
+      select_columns: [Setting, Value]
+      logic: |
+        row = df.loc[df['Setting'] == 'CMDVIOL', 'Value']
+        val = str(row.values[0]).upper() if len(row) > 0 else 'FALSE'
+        status = 'PASS' if val == 'TRUE' else 'FAIL'
+        detail = f"CMDVIOL={val}"
+        findings = [{'Setting': 'CMDVIOL', 'Value': val}]
+      assertion:
+        type: python_result
+        pass_message: "Command violation logging is active (CMDVIOL=TRUE)"
+        fail_message: "Command violation logging is NOT active (CMDVIOL=FALSE)"
+    remediation: >
+      Issue: SETROPTS CMDVIOL
+
+  - control_id: CIS-3.3
+    title: "Ensure AUDIT is set for all active RACF classes"
+    stig:
+      rule_id: N/A
+      severity: high
+      requirement_excerpt: >
+        Resource-level auditing must be enabled for all active classes so that
+        access events can be captured in SMF type 80 records.
+    cis:
+      section: "3.3"
+      level: L1
+      benchmark: "CIS IBM z/OS V2R5 with RACF v1.1.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.classInfo
+      select_columns: [name, CLASSACT, AUDIT]
+      logic: |
+        active = df[df['CLASSACT'] == 'YES']
+        no_audit = active[active['AUDIT'] != 'YES'][['name','CLASSACT','AUDIT']]
+        findings = no_audit.to_dict('records')
+        count = len(no_audit)
+        status = 'PASS' if count == 0 else 'FAIL'
+        detail = f"{count} active class(es) without AUDIT enabled"
+      assertion:
+        type: python_result
+        pass_message: "All active classes have AUDIT enabled"
+        fail_message: "{count} active class(es) do not have AUDIT enabled"
+    remediation: >
+      For each class listed, issue: SETROPTS AUDIT(classname)
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # SECTION 9 (v1.1.0 additions) – UNIX SYSTEM SERVICES
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - control_id: CIS-9.1
+    title: "Ensure SURROGAT class is ACTIVE and RACLISTed"
+    stig:
+      rule_id: N/A
+      severity: high
+      requirement_excerpt: >
+        The SURROGAT class must be active and RACLISTed to control which users
+        may submit jobs or start tasks on behalf of another user ID (surrogate
+        authority). Without this, surrogacy is uncontrolled.
+    cis:
+      section: "9.1"
+      level: L1
+      benchmark: "CIS IBM z/OS V2R5 with RACF v1.1.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.classInfo
+      select_columns: [name, CLASSACT, RACLIST]
+      logic: |
+        row = df[df['name'] == 'SURROGAT']
+        if len(row) == 0:
+            status = 'FAIL'
+            detail = "SURROGAT class not found in SETROPTS"
+            findings = [{'name': 'SURROGAT', 'CLASSACT': 'NOT SET', 'RACLIST': 'NOT SET'}]
+        else:
+            act = row['CLASSACT'].values[0]
+            rac = row['RACLIST'].values[0]
+            status = 'PASS' if act == 'YES' and rac == 'YES' else 'FAIL'
+            detail = f"CLASSACT={act}, RACLIST={rac}"
+            findings = row[['name','CLASSACT','RACLIST']].to_dict('records')
+      assertion:
+        type: python_result
+        pass_message: "SURROGAT class is ACTIVE and RACLISTed"
+        fail_message: "SURROGAT class is not properly activated (CLASSACT={CLASSACT}, RACLIST={RACLIST})"
+    remediation: >
+      Issue: SETROPTS CLASSACT(SURROGAT) RACLIST(SURROGAT)
+      Then define profiles for authorized surrogacy: RDEFINE SURROGAT <target>.SUBMIT UACC(NONE)
+
+  - control_id: CIS-9.2
+    title: "Ensure UNIXPRIV class is ACTIVE and RACLISTed"
+    stig:
+      rule_id: N/A
+      severity: high
+      requirement_excerpt: >
+        The UNIXPRIV class must be active and RACLISTed to control z/OS UNIX
+        superuser-level privileges (such as BPX.SUPERUSER, BPX.FILEATTR.*,
+        and UNIXPRIV.SUPERUSER) on a per-user basis.
+    cis:
+      section: "9.2"
+      level: L1
+      benchmark: "CIS IBM z/OS V2R5 with RACF v1.1.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.classInfo
+      select_columns: [name, CLASSACT, RACLIST]
+      logic: |
+        row = df[df['name'] == 'UNIXPRIV']
+        if len(row) == 0:
+            status = 'FAIL'
+            detail = "UNIXPRIV class not found in SETROPTS"
+            findings = [{'name': 'UNIXPRIV', 'CLASSACT': 'NOT SET', 'RACLIST': 'NOT SET'}]
+        else:
+            act = row['CLASSACT'].values[0]
+            rac = row['RACLIST'].values[0]
+            status = 'PASS' if act == 'YES' and rac == 'YES' else 'FAIL'
+            detail = f"CLASSACT={act}, RACLIST={rac}"
+            findings = row[['name','CLASSACT','RACLIST']].to_dict('records')
+      assertion:
+        type: python_result
+        pass_message: "UNIXPRIV class is ACTIVE and RACLISTed"
+        fail_message: "UNIXPRIV class is not properly activated (CLASSACT={CLASSACT}, RACLIST={RACLIST})"
+    remediation: >
+      Issue: SETROPTS CLASSACT(UNIXPRIV) RACLIST(UNIXPRIV)
+
+  - control_id: CIS-9.21
+    title: "Ensure ability to switch to superuser (BPX.SUPERUSER) is restricted"
+    stig:
+      rule_id: N/A
+      severity: high
+      requirement_excerpt: >
+        The UNIXPRIV class profile BPX.SUPERUSER grants a user the ability to
+        assume full z/OS UNIX superuser privilege. Its UACC must be NONE and
+        access must be explicitly granted only to authorized users.
+    cis:
+      section: "9.21"
+      level: L1
+      benchmark: "CIS IBM z/OS V2R5 with RACF v1.1.0"
+    data_sources_needed: [irrdbu00]
+    implementation:
+      engine: python
+      dataset: irrdbu00.generals + irrdbu00.generalAccess
+      select_columns: [GRBD_NAME, GRBD_CLASS_NAME, GRBD_UACC, GRACC_AUTH_ID, GRACC_ACCESS]
+      logic: |
+        profile = df[(df['GRBD_CLASS_NAME'] == 'UNIXPRIV') & (df['GRBD_NAME'] == 'BPX.SUPERUSER')]
+        if len(profile) == 0:
+            status = 'FAIL'
+            detail = "BPX.SUPERUSER profile does not exist in UNIXPRIV class"
+            findings = [{'GRBD_NAME': 'BPX.SUPERUSER', 'GRBD_CLASS_NAME': 'UNIXPRIV', 'GRBD_UACC': 'NOT DEFINED'}]
+        else:
+            uacc = profile['GRBD_UACC'].values[0]
+            accesses = access_df[(access_df['GRACC_CLASS_NAME'] == 'UNIXPRIV') & (access_df['GRACC_NAME'] == 'BPX.SUPERUSER')][['GRACC_AUTH_ID','GRACC_ACCESS']]
+            uacc_ok = str(uacc).upper() == 'NONE'
+            status = 'PASS' if uacc_ok else 'FAIL'
+            detail = f"BPX.SUPERUSER UACC={uacc}, {len(accesses)} explicit permit(s)"
+            findings = [{'GRBD_NAME': 'BPX.SUPERUSER', 'GRBD_UACC': uacc}] + accesses.to_dict('records')
+      assertion:
+        type: python_result
+        pass_message: "BPX.SUPERUSER exists with UACC(NONE)"
+        fail_message: "BPX.SUPERUSER has UACC={GRBD_UACC} — superuser access is not properly restricted"
+    remediation: >
+      Issue: RALTER UNIXPRIV BPX.SUPERUSER UACC(NONE)
+      Then explicitly permit only authorized users: PERMIT BPX.SUPERUSER CLASS(UNIXPRIV) ID(<userid>) ACCESS(READ)
+      Issue: SETROPTS RACLIST(UNIXPRIV) REFRESH
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # DB2 CONTROLS
+  # Source: CIS IBM Db2 13 for z/OS Benchmark v1.0.0
+  # These controls verify RACF-side configuration required by the Db2 benchmark.
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - control_id: DB2-1.2.1
+    title: "Ensure DSNR class is ACTIVE and RACLISTed (Db2 resource authorization)"
+    stig:
+      rule_id: N/A
+      severity: high
+      requirement_excerpt: >
+        The DSNR class must be active and RACLISTed so that RACF controls
+        access to Db2 resources. Without this, Db2 falls back to internal
+        authorization only, bypassing enterprise access control.
+    cis:
+      section: "Db2 resource authorization"
+      level: L1
+      benchmark: "CIS IBM Db2 13 for z/OS v1.0.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.classInfo
+      select_columns: [name, CLASSACT, RACLIST]
+      logic: |
+        row = df[df['name'] == 'DSNR']
+        if len(row) == 0:
+            status = 'FAIL'
+            detail = "DSNR class not found in SETROPTS — Db2 RACF authorization not active"
+            findings = [{'name': 'DSNR', 'CLASSACT': 'NOT SET', 'RACLIST': 'NOT SET'}]
+        else:
+            act = row['CLASSACT'].values[0]
+            rac = row['RACLIST'].values[0]
+            status = 'PASS' if act == 'YES' and rac == 'YES' else 'FAIL'
+            detail = f"CLASSACT={act}, RACLIST={rac}"
+            findings = row[['name','CLASSACT','RACLIST']].to_dict('records')
+      assertion:
+        type: python_result
+        pass_message: "DSNR class is ACTIVE and RACLISTed"
+        fail_message: "DSNR class is not properly activated (CLASSACT={CLASSACT}, RACLIST={RACLIST})"
+    remediation: >
+      Issue: SETROPTS CLASSACT(DSNR) RACLIST(DSNR)
+      Then define profiles for Db2 subsystems: RDEFINE DSNR <ssid>.BATCH UACC(NONE)
+
+  - control_id: DB2-2.1.5
+    title: "Ensure SERVAUTH class is ACTIVE and RACLISTed (Db2 network access control)"
+    stig:
+      rule_id: N/A
+      severity: high
+      requirement_excerpt: >
+        The SERVAUTH class must be active and RACLISTed to control TCP/IP
+        network access to Db2 via DRDA. This prevents unauthorized remote
+        connections to Db2 subsystems.
+    cis:
+      section: "2.1.5"
+      level: L1
+      benchmark: "CIS IBM Db2 13 for z/OS v1.0.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.classInfo
+      select_columns: [name, CLASSACT, RACLIST]
+      logic: |
+        row = df[df['name'] == 'SERVAUTH']
+        if len(row) == 0:
+            status = 'FAIL'
+            detail = "SERVAUTH class not found in SETROPTS — Db2 network access control not active"
+            findings = [{'name': 'SERVAUTH', 'CLASSACT': 'NOT SET', 'RACLIST': 'NOT SET'}]
+        else:
+            act = row['CLASSACT'].values[0]
+            rac = row['RACLIST'].values[0]
+            status = 'PASS' if act == 'YES' and rac == 'YES' else 'FAIL'
+            detail = f"CLASSACT={act}, RACLIST={rac}"
+            findings = row[['name','CLASSACT','RACLIST']].to_dict('records')
+      assertion:
+        type: python_result
+        pass_message: "SERVAUTH class is ACTIVE and RACLISTed"
+        fail_message: "SERVAUTH class is not properly activated (CLASSACT={CLASSACT}, RACLIST={RACLIST})"
+    remediation: >
+      Issue: SETROPTS CLASSACT(SERVAUTH) RACLIST(SERVAUTH)
+      Then define TCP/IP profiles for Db2 DRDA: RDEFINE SERVAUTH EZB.INITSTACK.<ssid>.* UACC(NONE)
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # CICS CONTROLS
+  # Source: CIS IBM CICS Transaction Server 6.1 Benchmark v1.1.0
+  # These controls verify RACF-side configuration required by the CICS benchmark.
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - control_id: CICS-1.2.1
+    title: "Ensure TCICSTRN class is ACTIVE and RACLISTed (CICS transaction security)"
+    stig:
+      rule_id: N/A
+      severity: high
+      requirement_excerpt: >
+        The TCICSTRN class must be active and RACLISTed so that RACF controls
+        which users may run CICS transactions. Without this, any user with CICS
+        access can run any transaction.
+    cis:
+      section: "1.2.1"
+      level: L1
+      benchmark: "CIS IBM CICS Transaction Server 6.1 v1.1.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.classInfo
+      select_columns: [name, CLASSACT, RACLIST]
+      logic: |
+        row = df[df['name'] == 'TCICSTRN']
+        if len(row) == 0:
+            status = 'FAIL'
+            detail = "TCICSTRN class not found — CICS transaction security not active"
+            findings = [{'name': 'TCICSTRN', 'CLASSACT': 'NOT SET', 'RACLIST': 'NOT SET'}]
+        else:
+            act = row['CLASSACT'].values[0]
+            rac = row['RACLIST'].values[0]
+            status = 'PASS' if act == 'YES' and rac == 'YES' else 'FAIL'
+            detail = f"CLASSACT={act}, RACLIST={rac}"
+            findings = row[['name','CLASSACT','RACLIST']].to_dict('records')
+      assertion:
+        type: python_result
+        pass_message: "TCICSTRN class is ACTIVE and RACLISTed"
+        fail_message: "TCICSTRN class is not properly activated (CLASSACT={CLASSACT}, RACLIST={RACLIST})"
+    remediation: >
+      Issue: SETROPTS CLASSACT(TCICSTRN) RACLIST(TCICSTRN)
+      Ensure CICS SIT parameter XTRAN=YES (or custom class name) is set to match.
+
+  - control_id: CICS-1.2.2
+    title: "Ensure GCICSTRN class is ACTIVE (CICS group transaction security)"
+    stig:
+      rule_id: N/A
+      severity: medium
+      requirement_excerpt: >
+        The GCICSTRN class provides group-level CICS transaction protection.
+        It must be active to allow generic profiles covering multiple
+        transaction IDs, reducing administrative overhead while enforcing access.
+    cis:
+      section: "1.2.2"
+      level: L1
+      benchmark: "CIS IBM CICS Transaction Server 6.1 v1.1.0"
+    data_sources_needed: [setropts]
+    implementation:
+      engine: python
+      dataset: setropts.classInfo
+      select_columns: [name, CLASSACT]
+      logic: |
+        row = df[df['name'] == 'GCICSTRN']
+        if len(row) == 0:
+            status = 'FAIL'
+            detail = "GCICSTRN class not found — CICS group transaction security not active"
+            findings = [{'name': 'GCICSTRN', 'CLASSACT': 'NOT SET'}]
+        else:
+            act = row['CLASSACT'].values[0]
+            status = 'PASS' if act == 'YES' else 'FAIL'
+            detail = f"CLASSACT={act}"
+            findings = row[['name','CLASSACT']].to_dict('records')
+      assertion:
+        type: python_result
+        pass_message: "GCICSTRN class is ACTIVE"
+        fail_message: "GCICSTRN class is not ACTIVE"
+    remediation: >
+      Issue: SETROPTS CLASSACT(GCICSTRN)
+      Define generic transaction group profiles: RDEFINE GCICSTRN <pattern> UACC(NONE)
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # CUSTOM CONTROLS
+  # Controls that reflect internal policy, client-specific requirements, or any
+  # rule that doesn't map to a published CIS/STIG benchmark.
+  #
+  # Schema for a custom control:
+  #
+  #   control_id: CUSTOM-<anything>   ← free-form, must be unique
+  #   title: "..."
+  #   severity: high | medium | low   ← top-level (no stig block needed)
+  #   requirement: >                  ← top-level (replaces stig.requirement_excerpt)
+  #     Plain-text policy statement.
+  #   custom:
+  #     benchmark: "Internal Security Policy v1.0"   ← groups controls in report
+  #     category:  "Access Control"                   ← used for section grouping
+  #     reference: "ISP-AC-001"                       ← ticket / policy ref (optional)
+  #   data_sources_needed: [setropts | irrdbu00 | dcollect]
+  #   implementation:
+  #     engine: pandas_query | python
+  #     dataset: ...
+  #     ...
+  #   remediation: >
+  #     ...
+  #
+  # Example — ensure no active non-STC user has both SPECIAL and OPERATIONS:
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - control_id: CUSTOM-1.1
+    title: "No active user may hold both SPECIAL and OPERATIONS simultaneously"
+    severity: high
+    requirement: >
+      Combining SPECIAL (unrestricted RACF administration) and OPERATIONS
+      (unrestricted DASD read/write) in a single user ID creates an account
+      that can both modify security policy and access all data with no
+      segregation of duties. This is prohibited by internal policy.
+    custom:
+      benchmark: "Internal Security Policy v1.0"
+      category: "Privilege Separation"
+      reference: "ISP-AC-007"
+    data_sources_needed: [irrdbu00]
+    implementation:
+      engine: python
+      dataset: irrdbu00.users
+      select_columns: [USBD_NAME, USBD_SPECIAL, USBD_OPER, USBD_REVOKE]
+      logic: |
+        findings_df = df[
+            (df['USBD_SPECIAL'] == 'YES') &
+            (df['USBD_OPER']    == 'YES') &
+            (df['USBD_REVOKE']  == 'NO')
+        ][['USBD_NAME','USBD_SPECIAL','USBD_OPER']]
+        findings = findings_df.to_dict('records')
+        count = len(findings_df)
+        status = 'PASS' if count == 0 else 'FAIL'
+        detail = f"{count} active user(s) with both SPECIAL and OPERATIONS"
+      assertion:
+        type: python_result
+        pass_message: "No active user holds both SPECIAL and OPERATIONS"
+        fail_message: "{count} user(s) combine SPECIAL + OPERATIONS — segregation of duties violation"
+    remediation: >
+      For each user listed, remove one of the two attributes.
+      OPERATIONS tasks: ALTUSER <userid> NOOPER
+      RACF admin tasks: ALTUSER <userid> NOSPECIAL
