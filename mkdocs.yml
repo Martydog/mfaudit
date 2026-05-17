@@ -29,7 +29,8 @@ nav:
     - Easy (pandas_query): examples/easy.md
     - Hard (python engine): examples/hard.md
   - Report output: report.md
-  - Contributing: contributing.md
+  - Wanna contribute?:
+    - Contributing: contributing.md
 
 markdown_extensions:
   - admonition
