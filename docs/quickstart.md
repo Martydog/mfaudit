@@ -31,18 +31,7 @@ Copy the output dataset to your workstation as a binary file.
 
 ### SETROPTS REXX export
 
-MFAudit requires a **REXX-produced** SETROPTS export — not raw `SETROPTS LIST` console output. Run this REXX exec on the mainframe:
-
-```rexx
-/* REXX — export SETROPTS settings as KEY:VALUE lines */
-"SETROPTS LIST"
-parse value "" with output
-do queued()
-  pull line
-  output = output || line || '0A'x
-end
-address MVS "EXECIO * DISKW SETROPTS (STEM output. FINIS)"
-```
+MFAudit requires a **REXX-produced** SETROPTS export — not raw `SETROPTS LIST` console output. Read https://mfpandas.readthedocs.io/en/latest/setropts.html for information on how to generate the SETROPTS file.
 
 The exec writes one `KEY:VALUE` line per setting. Copy `SETROPTS` to your workstation as text.
 
