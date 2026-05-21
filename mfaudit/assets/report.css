@@ -1,69 +1,77 @@
 /* ── MFAudit Report Stylesheet ──────────────────────────────────────────── */
+/* ── WeasyPrint / PDF-safe version ─────────────────────────────────────── */
 
-/* ── Fonts & Base ─────────────────────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap');
-
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-:root {
-  --green:   #1b7f3e;
-  --green-bg:#e8f5ee;
-  --red:     #c0392b;
-  --red-bg:  #fdecea;
-  --orange:  #d35400;
-  --orange-bg:#fef3e8;
-  --grey:    #6c757d;
-  --grey-bg: #f0f0f0;
-  --blue:    #1a5276;
-  --blue-bg: #eaf2f8;
-  --ink:     #1a1a2e;
-  --border:  #dde3ea;
-  --page-bg: #f7f8fb;
-  --card-bg: #ffffff;
-  --font-body: 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif;
-  --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
+/* ── Reset ─────────────────────────────────────────────────────────────── */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-html { font-size: 13px; }
+/* ── Variables ─────────────────────────────────────────────────────────── */
+:root {
+  --green: #1b7f3e;
+  --green-bg: #e8f5ee;
+
+  --red: #c0392b;
+  --red-bg: #fdecea;
+
+  --orange: #d35400;
+  --orange-bg: #fef3e8;
+
+  --grey: #6c757d;
+  --grey-bg: #f0f0f0;
+
+  --blue: #1a5276;
+  --blue-bg: #eaf2f8;
+
+  --ink: #1a1a2e;
+  --border: #dde3ea;
+
+  --page-bg: #f7f8fb;
+  --card-bg: #ffffff;
+}
+
+/* ── Base ──────────────────────────────────────────────────────────────── */
+html {
+  font-size: 13px;
+}
 
 body {
-  font-family: var(--font-body);
+  font-family: "IBM Plex Sans", Arial, sans-serif;
   color: var(--ink);
   background: var(--page-bg);
   line-height: 1.55;
-  padding: 0;
-  margin: 0;
 }
 
-/* ── Print & PDF layout ───────────────────────────────────────────────────── */
+/* ── PDF Layout ────────────────────────────────────────────────────────── */
 @page {
   size: A4;
   margin: 18mm 15mm 18mm 15mm;
+
   @bottom-center {
-    content: "MFAudit – RACF CIS Benchmark — Page " counter(page) " of " counter(pages);
-    font-family: var(--font-body);
-    font-size: 9px;
-    color: #999;
+      content: "MFAudit - RACF CIS Benchmark - Page " counter(page) " of " counter(pages);
+      font-family: "IBM Plex Sans", Arial, sans-serif;
+      font-size: 9px;
+      color: #999999;
   }
 }
 
-.page-break { page-break-after: always; }
+.page-break {
+  page-break-after: always;
+}
 
-/* ── Cover Page ───────────────────────────────────────────────────────────── */
+/* ── Cover Page ────────────────────────────────────────────────────────── */
 .cover {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
+  width: 100%;
   min-height: 240mm;
   padding: 40px 48px;
   background: linear-gradient(150deg, #0a1628 0%, #1a3a5c 100%);
-  color: #fff;
-  border-radius: 0;
+  color: #ffffff;
 }
 
 .cover-logo {
-  font-family: var(--font-mono);
+  font-family: "IBM Plex Mono", monospace;
   font-size: 1.2rem;
   letter-spacing: 0.15em;
   color: #7dc4ff;
@@ -71,77 +79,82 @@ body {
 }
 
 .cover-title {
-  font-size: 2.4rem;
+  font-size: 2.8rem;
   font-weight: 700;
+  line-height: 1.1;
   color: #ffffff;
-  line-height: 1.2;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
+  max-width: 420px;
 }
 
 .cover-subtitle {
   font-size: 1.05rem;
   color: #a8c8e8;
   margin-bottom: 36px;
+  max-width: 520px;
 }
 
 .cover-meta {
   border-collapse: collapse;
-  margin-bottom: 36px;
-  width: 100%;
-  max-width: 480px;
+  margin-bottom: 42px;
+  width: 480px;
 }
 
 .cover-meta th,
 .cover-meta td {
-  padding: 6px 12px;
+  padding: 8px 12px;
   text-align: left;
-  font-size: 0.9rem;
+  font-size: 0.92rem;
 }
 
 .cover-meta th {
+  width: 42%;
   color: #7dc4ff;
   font-weight: 600;
-  white-space: nowrap;
-  width: 40%;
 }
 
-.cover-meta td { color: #e0eaf5; }
+.cover-meta td {
+  color: #e0eaf5;
+}
 
 .cover-score {
   font-size: 5rem;
   font-weight: 700;
   line-height: 1;
   margin-bottom: 8px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+}
+
+.score-good {
+  color: #2ecc71;
+}
+
+.score-warn {
+  color: #f39c12;
+}
+
+.score-bad {
+  color: #e74c3c;
 }
 
 .score-label {
+  display: block;
+  margin-top: 8px;
   font-size: 0.85rem;
-  font-weight: 400;
   letter-spacing: 0.1em;
-  margin-top: 4px;
   color: #a8c8e8;
 }
 
-.score-good  { color: #2ecc71; }
-.score-warn  { color: #f39c12; }
-.score-bad   { color: #e74c3c; }
-
 .cover-disclaimer {
-  margin-top: 32px;
-  font-size: 0.78rem;
-  color: #6e90b0;
-  max-width: 540px;
-  line-height: 1.6;
+  margin-top: 40px;
+  max-width: 560px;
+  font-size: 0.8rem;
+  line-height: 1.7;
+  color: #7f9dbd;
 }
 
-/* ── Sections ─────────────────────────────────────────────────────────────── */
+/* ── Sections ──────────────────────────────────────────────────────────── */
 .section {
-  padding: 32px 40px;
-  max-width: 960px;
-  margin: 0 auto;
+  padding: 30px 36px;
 }
 
 h2 {
@@ -160,21 +173,22 @@ h3 {
   margin: 24px 0 12px;
 }
 
-/* ── Summary cards ────────────────────────────────────────────────────────── */
+/* ── Summary Cards ─────────────────────────────────────────────────────── */
 .summary-grid {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
   margin-bottom: 28px;
+  font-size: 0;
 }
 
 .summary-card {
-  flex: 1 1 80px;
-  min-width: 80px;
-  border-radius: 8px;
+  display: inline-block;
+  width: 18%;
+  min-width: 100px;
+  margin-right: 1.5%;
   padding: 16px 12px;
-  text-align: center;
+  border-radius: 8px;
   border: 2px solid transparent;
+  text-align: center;
+  vertical-align: top;
 }
 
 .card-number {
@@ -187,31 +201,58 @@ h3 {
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.12em;
-  margin-top: 4px;
+  margin-top: 6px;
 }
 
-.card-pass   { background: var(--green-bg);  border-color: var(--green);  color: var(--green); }
-.card-fail   { background: var(--red-bg);    border-color: var(--red);    color: var(--red); }
-.card-review { background: var(--orange-bg); border-color: var(--orange); color: var(--orange); }
-.card-skip   { background: var(--grey-bg);   border-color: var(--grey);   color: var(--grey); }
-.card-error  { background: #f5eaf5;          border-color: #8e44ad;       color: #8e44ad; }
+.card-pass {
+  background: var(--green-bg);
+  border-color: var(--green);
+  color: var(--green);
+}
 
-/* ── Overview table ───────────────────────────────────────────────────────── */
-.overview-table {
+.card-fail {
+  background: var(--red-bg);
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.card-review {
+  background: var(--orange-bg);
+  border-color: var(--orange);
+  color: var(--orange);
+}
+
+.card-skip {
+  background: var(--grey-bg);
+  border-color: var(--grey);
+  color: var(--grey);
+}
+
+.card-error {
+  background: #f5eaf5;
+  border-color: #8e44ad;
+  color: #8e44ad;
+}
+
+/* ── Tables ────────────────────────────────────────────────────────────── */
+.overview-table,
+.findings-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.85rem;
+}
+
+.overview-table {
   margin-bottom: 24px;
+  font-size: 0.85rem;
 }
 
 .overview-table th {
   background: #1a3a5c;
-  color: #fff;
+  color: #ffffff;
   padding: 8px 10px;
   text-align: left;
-  font-weight: 600;
   font-size: 0.78rem;
-  letter-spacing: 0.05em;
+  font-weight: 600;
 }
 
 .overview-table td {
@@ -220,54 +261,75 @@ h3 {
   vertical-align: top;
 }
 
-.overview-table tbody tr:nth-child(even) { background: #fafbfc; }
+.overview-table tbody tr:nth-child(even) {
+  background: #fafbfc;
+}
 
-.row-pass   { border-left: 4px solid var(--green); }
-.row-fail   { border-left: 4px solid var(--red); }
-.row-review { border-left: 4px solid var(--orange); }
-.row-skip   { border-left: 4px solid var(--grey); opacity: 0.7; }
-.row-error  { border-left: 4px solid #8e44ad; }
+/* ── Status Rows ───────────────────────────────────────────────────────── */
+.row-pass {
+  border-left: 4px solid var(--green);
+}
 
-/* ── Badges ───────────────────────────────────────────────────────────────── */
+.row-fail {
+  border-left: 4px solid var(--red);
+}
+
+.row-review {
+  border-left: 4px solid var(--orange);
+}
+
+.row-skip {
+  border-left: 4px solid var(--grey);
+}
+
+.row-error {
+  border-left: 4px solid #8e44ad;
+}
+
+/* ── Badges ────────────────────────────────────────────────────────────── */
 .badge {
   display: inline-block;
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 
-.badge-pass   { background: var(--green-bg);  color: var(--green); }
-.badge-fail   { background: var(--red-bg);    color: var(--red); }
-.badge-review { background: var(--orange-bg); color: var(--orange); }
-.badge-skip   { background: var(--grey-bg);   color: var(--grey); }
-.badge-error  { background: #f5eaf5;          color: #8e44ad; }
+.badge-pass {
+  background: var(--green-bg);
+  color: var(--green);
+}
 
-/* ── Severity badges ──────────────────────────────────────────────────────── */
-.sev-high   { color: var(--red);    font-weight: 700; }
-.sev-medium { color: var(--orange); font-weight: 600; }
-.sev-low    { color: var(--blue);   font-weight: 400; }
+.badge-fail {
+  background: var(--red-bg);
+  color: var(--red);
+}
 
-.sev-badge.sev-high   { background: var(--red-bg);    color: var(--red); }
-.sev-badge.sev-medium { background: var(--orange-bg); color: var(--orange); }
-.sev-badge.sev-low    { background: var(--blue-bg);   color: var(--blue); }
+.badge-review {
+  background: var(--orange-bg);
+  color: var(--orange);
+}
 
-/* ── Control cards ────────────────────────────────────────────────────────── */
+.badge-skip {
+  background: var(--grey-bg);
+  color: var(--grey);
+}
+
+.badge-error {
+  background: #f5eaf5;
+  color: #8e44ad;
+}
+
+/* ── Control Cards ─────────────────────────────────────────────────────── */
 .control-card {
-  background: var(--card-bg);
+  background: #ffffff;
   border: 1px solid var(--border);
   border-radius: 6px;
   margin-bottom: 18px;
   overflow: hidden;
+  page-break-inside: avoid;
 }
-
-.status-border-pass   { border-left: 5px solid var(--green); }
-.status-border-fail   { border-left: 5px solid var(--red); }
-.status-border-review { border-left: 5px solid var(--orange); }
-.status-border-skip   { border-left: 5px solid var(--grey); opacity: 0.75; }
-.status-border-error  { border-left: 5px solid #8e44ad; }
 
 .control-header {
   background: #f4f6f9;
@@ -275,23 +337,17 @@ h3 {
   padding: 12px 16px;
 }
 
-.control-id-block {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.control-id {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--blue);
   margin-bottom: 4px;
 }
 
-.control-id {
-  font-family: var(--font-mono);
-  font-weight: 600;
-  font-size: 0.85rem;
-  color: var(--blue);
-}
-
 .control-title {
-  font-weight: 600;
   font-size: 0.95rem;
+  font-weight: 600;
   color: var(--ink);
   margin-bottom: 4px;
 }
@@ -305,47 +361,29 @@ h3 {
   padding: 12px 16px;
 }
 
+/* ── Fields ────────────────────────────────────────────────────────────── */
 .field-group {
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .field-label {
   font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #5a6a7e;
-  margin-bottom: 3px;
-}
-
-.findings-count {
-  font-weight: 400;
-  font-size: 0.72rem;
-  color: #888;
-  margin-left: 4px;
+  margin-bottom: 4px;
 }
 
 .field-value {
   font-size: 0.88rem;
-  color: var(--ink);
   line-height: 1.5;
 }
 
-.text-pass   { color: var(--green);  font-weight: 600; }
-.text-fail   { color: var(--red);    font-weight: 600; }
-.text-review { color: var(--orange); font-weight: 600; }
-
-/* ── Findings table ───────────────────────────────────────────────────────── */
-.findings-table-wrap {
-  overflow-x: auto;
-  margin-top: 4px;
-}
-
+/* ── Findings Table ────────────────────────────────────────────────────── */
 .findings-table {
-  border-collapse: collapse;
+  margin-top: 8px;
   font-size: 0.78rem;
-  font-family: var(--font-mono);
-  min-width: 100%;
+  font-family: "IBM Plex Mono", monospace;
 }
 
 .findings-table th {
@@ -354,7 +392,6 @@ h3 {
   padding: 5px 10px;
   text-align: left;
   font-size: 0.72rem;
-  letter-spacing: 0.05em;
 }
 
 .findings-table td {
@@ -364,75 +401,50 @@ h3 {
   word-break: break-all;
 }
 
-.findings-table tbody tr:nth-child(even) { background: #f9fafb; }
-
-.truncated {
-  color: #888;
-  font-style: italic;
-  text-align: center;
-  padding: 6px;
-}
-
-/* ── Remediation block ────────────────────────────────────────────────────── */
+/* ── Remediation ───────────────────────────────────────────────────────── */
 .remediation {
   background: #fffbf0;
   border: 1px solid #f0d080;
   border-radius: 4px;
-  padding: 8px 12px;
-  margin-top: 10px;
+  padding: 10px 12px;
+  margin-top: 12px;
   page-break-inside: avoid;
 }
 
 .remediation pre {
-  font-family: var(--font-mono);
+  font-family: "IBM Plex Mono", monospace;
   font-size: 0.82rem;
-  color: #6b4c00;
   white-space: pre-wrap;
   word-break: break-word;
+  color: #6b4c00;
 }
 
-/* ── Utility ──────────────────────────────────────────────────────────────── */
-.mono   { font-family: var(--font-mono); }
-.small  { font-size: 0.78rem; }
-.center { text-align: center; }
-
-/* ── Anonymized banners ───────────────────────────────────────────────────── */
-.anon-banner {
-  margin-top: 32px;
-  padding: 12px 18px;
-  background: rgba(255, 255, 255, 0.12);
-  border: 2px solid #7dc4ff;
-  border-radius: 6px;
-  color: #7dc4ff;
-  font-size: 0.82rem;
-  line-height: 1.5;
-  max-width: 580px;
+/* ── Utility ───────────────────────────────────────────────────────────── */
+.mono {
+  font-family: "IBM Plex Mono", monospace;
 }
 
-.anon-notice {
-  padding: 10px 16px;
-  background: #eaf4ff;
-  border: 1.5px solid #5ba4d4;
-  border-radius: 6px;
-  color: #1a4f78;
-  font-size: 0.85rem;
-  margin-bottom: 20px;
-  line-height: 1.5;
+.small {
+  font-size: 0.78rem;
 }
 
-/* ── Footer ───────────────────────────────────────────────────────────────── */
+.center {
+  text-align: center;
+}
+
+/* ── Footer ────────────────────────────────────────────────────────────── */
 .report-footer {
   margin-top: 40px;
-  padding: 16px 40px;
+  padding-top: 16px;
   border-top: 2px solid var(--border);
-  font-size: 0.75rem;
-  color: #888;
   text-align: center;
+  font-size: 0.75rem;
   line-height: 1.7;
+  color: #888888;
 }
 
 .footer-disclaimer {
-  font-style: italic;
-  color: #aaa;
   margin-top: 4px;
+  font-style: italic;
+  color: #aaaaaa;
 }
