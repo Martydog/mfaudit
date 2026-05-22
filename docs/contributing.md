@@ -30,7 +30,6 @@ The CIS z/OS Benchmark provides a strong baseline, but many organizations also r
 
 - DISA STIG;
 - internal hardening standards;
-- BIO/NIS2 mappings;
 - organization-specific RACF policies.
 
 A community-maintained `stig_controls.yaml` would be highly valuable.

@@ -220,7 +220,6 @@ See the installation guide for:
 - CIS Benchmark validation
 - STIG evidence generation
 - Internal audit preparation
-- ADR/BIO2 compliance reviews
 - Continuous RACF posture monitoring
 - Security baseline verification
 - Mainframe compliance automation
